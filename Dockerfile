@@ -1,0 +1,108 @@
+FROM node:18
+
+WORKDIR /opt/ghost
+
+EXPOSE 2368
+
+COPY .github ./.github
+COPY nx.json .
+COPY yarn.lock .
+COPY package.json .
+COPY apps/admin-x-demo/package.json ./apps/admin-x-demo/package.json
+COPY apps/admin-x-design-system/package.json ./apps/admin-x-design-system/package.json
+COPY apps/admin-x-framework/package.json ./apps/admin-x-framework/package.json
+COPY apps/admin-x-settings/package.json ./apps/admin-x-settings/package.json
+COPY apps/announcement-bar/package.json ./apps/announcement-bar/package.json
+COPY apps/comments-ui/package.json ./apps/comments-ui/package.json
+COPY apps/portal/package.json ./apps/portal/package.json
+COPY apps/signup-form/package.json ./apps/signup-form/package.json
+COPY apps/sodo-search/package.json ./apps/sodo-search/package.json
+COPY ghost/adapter-cache-memory-ttl/package.json ./ghost/adapter-cache-memory-ttl/package.json
+COPY ghost/adapter-cache-redis/package.json ./ghost/adapter-cache-redis/package.json
+COPY ghost/adapter-manager/package.json ./ghost/adapter-manager/package.json
+COPY ghost/admin/package.json ./ghost/admin/package.json
+COPY ghost/announcement-bar-settings/package.json ./ghost/announcement-bar-settings/package.json
+COPY ghost/api-framework/package.json ./ghost/api-framework/package.json
+COPY ghost/api-version-compatibility-service/package.json ./ghost/api-version-compatibility-service/package.json
+COPY ghost/audience-feedback/package.json ./ghost/audience-feedback/package.json
+COPY ghost/bookshelf-repository/package.json ./ghost/bookshelf-repository/package.json
+COPY ghost/bootstrap-socket/package.json ./ghost/bootstrap-socket/package.json
+COPY ghost/collections/package.json ./ghost/collections/package.json
+COPY ghost/constants/package.json ./ghost/constants/package.json
+COPY ghost/core/package.json ./ghost/core/package.json
+COPY ghost/custom-theme-settings-service/package.json ./ghost/custom-theme-settings-service/package.json
+COPY ghost/data-generator/package.json ./ghost/data-generator/package.json
+COPY ghost/domain-events/package.json ./ghost/domain-events/package.json
+COPY ghost/donations/package.json ./ghost/donations/package.json
+COPY ghost/dynamic-routing-events/package.json ./ghost/dynamic-routing-events/package.json
+COPY ghost/email-addresses/package.json ./ghost/email-addresses/package.json
+COPY ghost/email-analytics-provider-mailgun/package.json ./ghost/email-analytics-provider-mailgun/package.json
+COPY ghost/email-analytics-service/package.json ./ghost/email-analytics-service/package.json
+COPY ghost/email-content-generator/package.json ./ghost/email-content-generator/package.json
+COPY ghost/email-events/package.json ./ghost/email-events/package.json
+COPY ghost/email-service/package.json ./ghost/email-service/package.json
+COPY ghost/email-suppression-list/package.json ./ghost/email-suppression-list/package.json
+COPY ghost/event-aware-cache-wrapper/package.json ./ghost/event-aware-cache-wrapper/package.json
+COPY ghost/express-dynamic-redirects/package.json ./ghost/express-dynamic-redirects/package.json
+COPY ghost/external-media-inliner/package.json ./ghost/external-media-inliner/package.json
+COPY ghost/extract-api-key/package.json ./ghost/extract-api-key/package.json
+COPY ghost/ghost/package.json ./ghost/ghost/package.json
+COPY ghost/html-to-plaintext/package.json ./ghost/html-to-plaintext/package.json
+COPY ghost/i18n/package.json ./ghost/i18n/package.json
+COPY ghost/importer-handler-content-files/package.json ./ghost/importer-handler-content-files/package.json
+COPY ghost/importer-revue/package.json ./ghost/importer-revue/package.json
+COPY ghost/in-memory-repository/package.json ./ghost/in-memory-repository/package.json
+COPY ghost/job-manager/package.json ./ghost/job-manager/package.json
+COPY ghost/link-redirects/package.json ./ghost/link-redirects/package.json
+COPY ghost/link-replacer/package.json ./ghost/link-replacer/package.json
+COPY ghost/link-tracking/package.json ./ghost/link-tracking/package.json
+COPY ghost/magic-link/package.json ./ghost/magic-link/package.json
+COPY ghost/mail-events/package.json ./ghost/mail-events/package.json
+COPY ghost/mailgun-client/package.json ./ghost/mailgun-client/package.json
+COPY ghost/member-attribution/package.json ./ghost/member-attribution/package.json
+COPY ghost/member-events/package.json ./ghost/member-events/package.json
+COPY ghost/members-api/package.json ./ghost/members-api/package.json
+COPY ghost/members-csv/package.json ./ghost/members-csv/package.json
+COPY ghost/members-events-service/package.json ./ghost/members-events-service/package.json
+COPY ghost/members-importer/package.json ./ghost/members-importer/package.json
+COPY ghost/members-ssr/package.json ./ghost/members-ssr/package.json
+COPY ghost/mentions-email-report/package.json ./ghost/mentions-email-report/package.json
+COPY ghost/milestones/package.json ./ghost/milestones/package.json
+COPY ghost/minifier/package.json ./ghost/minifier/package.json
+COPY ghost/model-to-domain-event-interceptor/package.json ./ghost/model-to-domain-event-interceptor/package.json
+COPY ghost/mw-api-version-mismatch/package.json ./ghost/mw-api-version-mismatch/package.json
+COPY ghost/mw-cache-control/package.json ./ghost/mw-cache-control/package.json
+COPY ghost/mw-error-handler/package.json ./ghost/mw-error-handler/package.json
+COPY ghost/mw-session-from-token/package.json ./ghost/mw-session-from-token/package.json
+COPY ghost/mw-update-user-last-seen/package.json ./ghost/mw-update-user-last-seen/package.json
+COPY ghost/mw-version-match/package.json ./ghost/mw-version-match/package.json
+COPY ghost/mw-vhost/package.json ./ghost/mw-vhost/package.json
+COPY ghost/nql-filter-expansions/package.json ./ghost/nql-filter-expansions/package.json
+COPY ghost/oembed-service/package.json ./ghost/oembed-service/package.json
+COPY ghost/offers/package.json ./ghost/offers/package.json
+COPY ghost/package-json/package.json ./ghost/package-json/package.json
+COPY ghost/payments/package.json ./ghost/payments/package.json
+COPY ghost/post-events/package.json ./ghost/post-events/package.json
+COPY ghost/post-revisions/package.json ./ghost/post-revisions/package.json
+COPY ghost/posts-service/package.json ./ghost/posts-service/package.json
+COPY ghost/recommendations/package.json ./ghost/recommendations/package.json
+COPY ghost/referrers/package.json ./ghost/referrers/package.json
+COPY ghost/security/package.json ./ghost/security/package.json
+COPY ghost/session-service/package.json ./ghost/session-service/package.json
+COPY ghost/settings-path-manager/package.json ./ghost/settings-path-manager/package.json
+COPY ghost/slack-notifications/package.json ./ghost/slack-notifications/package.json
+COPY ghost/staff-service/package.json ./ghost/staff-service/package.json
+COPY ghost/stats-service/package.json ./ghost/stats-service/package.json
+COPY ghost/stripe/package.json ./ghost/stripe/package.json
+COPY ghost/tiers/package.json ./ghost/tiers/package.json
+COPY ghost/update-check-service/package.json ./ghost/update-check-service/package.json
+COPY ghost/verification-trigger/package.json ./ghost/verification-trigger/package.json
+COPY ghost/version-notifications-data-service/package.json ./ghost/version-notifications-data-service/package.json
+COPY ghost/webmentions/package.json ./ghost/webmentions/package.json
+
+RUN yarn
+
+COPY ./ghost ./ghost
+COPY ./apps ./apps
+
+CMD ["yarn", "dev", "--ghost"]

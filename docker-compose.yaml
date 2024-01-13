@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  ghost:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ghost
+    restart: unless-stopped
+    ports:
+      - "2368:2368"
+    depends_on:
+      - db
+      - redis
+    environment:
+      server__host: '0.0.0.0'
+      database__host: db
+      database__port: 3306
+      database__user: root
+      database__password: password
+    volumes:
+      - ./ghost/core/core/server:/opt/ghost/ghost/core/core/server
+
+  db:
+    image: mysql:latest
+    container_name: ghost-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: ghost
+
+  redis:
+    image: redis:7.0.12
+    container_name: ghost-redis
