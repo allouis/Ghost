@@ -1,6 +1,12 @@
 version: '3.8'
 
 services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+
   ghost:
     build:
       context: .
