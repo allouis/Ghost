@@ -1,10 +1,19 @@
 version: '3.8'
 
+volumes:
+  codebase:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /Users/egg/Code/Ghost
+
 services:
   devcontainer:
     image: mcr.microsoft.com/devcontainers/base:ubuntu
+    container_name: devcontainer
     volumes:
-      - ../..:/workspaces:cached
+      - codebase:/workspaces
     command: sleep infinity
 
   ghost:
@@ -12,6 +21,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ghost
+    volumes:
+      - codebase:/opt/ghost
+    command: sleep infinity
     restart: unless-stopped
     ports:
       - "2368:2368"
@@ -24,8 +36,6 @@ services:
       database__port: 3306
       database__user: root
       database__password: password
-    volumes:
-      - ./ghost/core/core/server:/opt/ghost/ghost/core/core/server
 
   db:
     image: mysql:latest
