@@ -1099,5 +1099,9 @@ module.exports = {
         recommendation_id: {type: 'string', maxlength: 24, nullable: false, references: 'recommendations.id', unique: false, cascadeDelete: true},
         member_id: {type: 'string', maxlength: 24, nullable: true, references: 'members.id', unique: false, setNullDelete: true},
         created_at: {type: 'dateTime', nullable: false}
+    },
+    json: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        json: {type: 'text', maxlength: 1_000_000_000, nullable: true}
     }
 };
