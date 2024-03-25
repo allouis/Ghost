@@ -2,6 +2,7 @@ const cacheControl = require('@tryghost/mw-cache-control');
 const express = require('../../shared/express');
 const settings = require('../../shared/settings-cache');
 const config = require('../../shared/config');
+const GhostNestApp = require('@tryghost/ghost');
 
 module.exports = function setupWellKnownApp() {
     const wellKnownApp = express('well-known');
@@ -34,6 +35,18 @@ module.exports = function setupWellKnownApp() {
             }));
 
         res.json({keys});
+    });
+
+    wellKnownApp.get('/webfinger', async function (req, res) {
+        const webfingerService = await GhostNestApp.resolve('WebFingerService');
+
+        try {
+            const result = await webfingerService.getResource(req.query.resource);
+            res.json(result);
+        } catch (err) {
+            console.log(err);
+            throw err;
+        }
     });
 
     return wellKnownApp;

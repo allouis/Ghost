@@ -23,6 +23,7 @@
     "@nestjs/testing": "10.3.7",
     "@types/node": "^20.10.0",
     "@types/sinon": "^17.0.3",
+    "activitypub-types": "^1.1.0",
     "c8": "8.0.1",
     "mocha": "10.2.0",
     "reflect-metadata": "0.1.13",
@@ -37,6 +38,8 @@
     "@tryghost/errors": "^1.2.27",
     "bson-objectid": "2.0.4",
     "express": "^4.18.2",
+    "keypair": "^1.0.4",
+    "node-jose": "^2.2.0",
     "reflect-metadata": "^0.1.14",
     "rxjs": "^7.8.1"
   }

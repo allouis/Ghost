@@ -13,9 +13,8 @@ class AppModuleClass {}
 export const AppModule: DynamicModule = {
     global: true,
     module: AppModuleClass,
-    imports: [AdminAPIModule],
-    exports: [],
-    controllers: [],
+    controllers: [].concat(AdminAPIModule.controllers as any),
+    exports: [].concat(AdminAPIModule.exports as any),
     providers: [
         ExampleListener,
         {
@@ -34,5 +33,5 @@ export const AppModule: DynamicModule = {
             provide: APP_INTERCEPTOR,
             useClass: LocationHeaderInterceptor
         }
-    ]
+    ].concat(AdminAPIModule.providers as any)
 };

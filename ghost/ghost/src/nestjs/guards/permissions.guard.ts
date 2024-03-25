@@ -18,6 +18,10 @@ export class PermissionsGuard implements CanActivate {
 
         const role = request.actor?.role;
 
+        if (!roles) {
+            return true;
+        }
+
         if (role && roles.includes(role)) {
             return true;
         }
