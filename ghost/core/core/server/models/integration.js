@@ -98,6 +98,30 @@ const Integration = ghostBookshelf.Model.extend({
         }
     },
 
+    /**
+     * New permission check method with simplified interface.
+     *
+     * Returns: { result: 'grant' | 'deny' | null }
+     * - 'grant': Permission granted regardless of base permission
+     * - 'deny': Permission denied
+     * - null: Defer to base permission check
+     *
+     * @param {Object|string} integrationModelOrId - Integration model or ID (unused)
+     * @param {string} action - Action being performed (add, edit, etc.)
+     * @param {PermissionContext} permCtx - Permission context (unused here)
+     * @returns {Promise<{result: string|null}>}
+     */
+    // eslint-disable-next-line no-unused-vars
+    async permissibleV2(integrationModelOrId, action, permCtx) {
+        // Check limits on add action
+        if (action === 'add' && limitService.isLimited('customIntegrations')) {
+            await limitService.errorIfWouldGoOverLimit('customIntegrations');
+        }
+
+        // Always defer to base permission - Integration has no special business rules
+        return {result: null};
+    },
+
     async getInternalFrontendKey(options) {
         options = options || {};
 
