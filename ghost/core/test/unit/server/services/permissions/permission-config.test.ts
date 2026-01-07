@@ -83,11 +83,26 @@ describe('Permission Config', function () {
             });
         });
 
-        describe('Owner role', function () {
-            it('should have all Administrator permissions', function () {
+        describe('Owner role (superuser with "all": "all")', function () {
+            it('should allow Owner all permissions via "all": "all" pattern', function () {
+                // Owner uses { "all": "all" } in fixtures - grants all actions on all objects
                 assert.equal(hasPermission('Owner', 'browse', 'post'), true);
                 assert.equal(hasPermission('Owner', 'edit', 'setting'), true);
                 assert.equal(hasPermission('Owner', 'destroy', 'user'), true);
+                assert.equal(hasPermission('Owner', 'add', 'integration'), true);
+                assert.equal(hasPermission('Owner', 'moderate', 'comment'), true);
+            });
+
+            it('should still reject invalid action/object combinations', function () {
+                // Even with "all": "all", typos should fail (action must exist for object)
+                assert.equal(hasPermission('Owner', 'nonexistent', 'post'), false);
+                assert.equal(hasPermission('Owner', 'browse', 'nonexistent'), false);
+            });
+
+            it('should have "all": "all" in raw permissions', function () {
+                const perms = getRolePermissions('Owner');
+                assert.ok(perms);
+                assert.equal(perms.all, 'all');
             });
         });
 

@@ -51,6 +51,7 @@ const fixtures: Fixtures = require(path.join(__dirname, '../../data/schema/fixtu
  * role name → { objectType → actions }
  *
  * The fixtures format supports:
+ * - { "all": "all" } - superuser pattern, all actions on all objects
  * - "all" shorthand meaning all available actions for that object
  * - Array of specific actions like ["browse", "read", "edit"]
  * - Single action string like "read"
@@ -74,8 +75,8 @@ function buildRolePermissions(): RolePermissionsMap {
         perms[roleName] = rolePerms;
     }
 
-    // Add Owner role (mirrors Administrator)
-    // Owner gets all Administrator permissions explicitly
+    // Owner role should exist in fixtures now (mirrors Administrator)
+    // This fallback is kept for backwards compatibility with older fixtures
     if (perms.Administrator && !perms.Owner) {
         perms.Owner = {...perms.Administrator};
     }
@@ -134,6 +135,13 @@ export function hasPermission(role: string, actionType: string, objectType: stri
     const rolePerms = rolePermissions[role];
     if (!rolePerms) {
         return false;
+    }
+
+    // Handle { "all": "all" } superuser pattern - all actions on all objects
+    // Check if the action/object exists in the system to prevent typos granting access
+    if (rolePerms.all === 'all') {
+        const validActions = objectActions[objectType];
+        return validActions ? validActions.includes(actionType) : false;
     }
 
     const objectPerms = rolePerms[objectType];

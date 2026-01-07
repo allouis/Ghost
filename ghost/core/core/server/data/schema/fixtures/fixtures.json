@@ -902,6 +902,9 @@
                     "recommendation": "all",
                     "identity": "read"
                 },
+                "Owner": {
+                    "all": "all"
+                },
                 "DB Backup Integration": {
                     "db": "all",
                     "member": "browse"
