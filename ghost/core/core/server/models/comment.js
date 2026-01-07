@@ -213,6 +213,47 @@ const Comment = ghostBookshelf.Model.extend({
         return hasMemberPermission;
     },
 
+    /**
+     * New permission check method with simplified interface.
+     *
+     * Returns: { result: 'grant' | 'deny' | null }
+     * - 'grant': Permission granted regardless of base permission
+     * - 'deny': Permission denied
+     * - null: Defer to base permission check
+     *
+     * @param {Object|string} commentModelOrId - Comment model or ID
+     * @param {string} action - Action being performed (edit, destroy, etc.)
+     * @param {PermissionContext} permCtx - Permission context with role, actorId, etc.
+     * @returns {Promise<{result: string|null}>}
+     */
+    async permissibleV2(commentModelOrId, action, permCtx) {
+        // Staff users (role !== 'Member') always granted for comments
+        if (permCtx.isStaff()) {
+            return {result: 'grant'};
+        }
+
+        // Load model if given an ID string
+        let commentModel = commentModelOrId;
+        if (typeof commentModelOrId === 'string') {
+            commentModel = await this.findOne({id: commentModelOrId});
+            if (!commentModel) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.commentNotFound)
+                });
+            }
+        }
+
+        // Members can only edit/delete their own comments
+        if (action === 'edit' || action === 'destroy') {
+            if (commentModel && !permCtx.isActorId(commentModel.get('member_id'))) {
+                return {result: 'deny'};
+            }
+        }
+
+        // Defer to base permission for all other cases
+        return {result: null};
+    },
+
     applyRepliesWithRelatedOption(withRelated, isAdmin) {
         // we want to apply filters when fetching replies so we don't expose data that should be hidden
         // - public requests never return hidden or deleted replies
