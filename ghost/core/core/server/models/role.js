@@ -107,6 +107,72 @@ Role = ghostBookshelf.Model.extend({
         }
 
         return Promise.reject(new errors.NoPermissionError({message: tpl(messages.notEnoughPermission)}));
+    },
+
+    /**
+     * New permission check method with simplified interface.
+     *
+     * Returns: { result: 'grant' | 'deny' | null }
+     * - 'grant': Permission granted regardless of base permission
+     * - 'deny': Permission denied
+     * - null: Defer to base permission check
+     *
+     * @param {Object|string|number} roleModelOrId - Role model or ID
+     * @param {string} action - Action being performed (assign, browse, etc.)
+     * @param {PermissionContext} permCtx - Permission context with role, isViaApiKey, etc.
+     * @returns {Promise<{result: string|null}>}
+     */
+    async permissibleV2(roleModelOrId, action, permCtx) {
+        // For non-assign actions, defer to base permission
+        if (action !== 'assign') {
+            return {result: null};
+        }
+
+        // Load model if given an ID
+        let roleModel = roleModelOrId;
+        if (typeof roleModelOrId === 'string' || typeof roleModelOrId === 'number') {
+            roleModel = await this.findOne({id: roleModelOrId, status: 'all'});
+            if (!roleModel) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.roleNotFound)
+                });
+            }
+        }
+
+        const targetRoleName = roleModel.get('name');
+
+        // API key cannot assign Owner role
+        if (permCtx.isViaApiKey && targetRoleName === 'Owner') {
+            return {result: 'deny'};
+        }
+
+        // For API keys (except Owner assignment blocked above), defer to base permission
+        // API keys don't have the same role hierarchy restrictions as users
+        if (permCtx.isViaApiKey) {
+            return {result: null};
+        }
+
+        // Define role assignment hierarchy for staff users
+        // Each role can assign roles at or below their level
+        const roleHierarchy = {
+            Owner: ['Owner', 'Administrator', 'Super Editor', 'Editor', 'Author', 'Contributor'],
+            Administrator: ['Administrator', 'Super Editor', 'Editor', 'Author', 'Contributor'],
+            'Super Editor': ['Author', 'Contributor'],
+            Editor: ['Author', 'Contributor'],
+            Author: [],
+            Contributor: []
+        };
+
+        const actorRole = permCtx.role;
+        const allowedRoles = roleHierarchy[actorRole] || [];
+
+        // Check if actor's role can assign the target role
+        if (!allowedRoles.includes(targetRoleName)) {
+            return {result: 'deny'};
+        }
+
+        // Defer to base permission for final check
+        return {result: null};
     }
 });
 
