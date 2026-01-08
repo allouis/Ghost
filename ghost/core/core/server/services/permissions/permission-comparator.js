@@ -59,6 +59,7 @@ async function compare(context, action, objectType, modelOrId, unsafeAttrs, oldC
         oldError: null,
         newError: null,
         newExcludedAttrs: [],
+        resolvedRole: null,
         decision: null,
         conflict: false,
         timestamp: new Date().toISOString()
@@ -78,6 +79,7 @@ async function compare(context, action, objectType, modelOrId, unsafeAttrs, oldC
         const newResult = await newCheck();
         result.newGranted = true;
         result.newExcludedAttrs = newResult?.excludedAttrs || [];
+        result.resolvedRole = newResult?.role || null;
     } catch (err) {
         result.newGranted = false;
         result.newError = isPermissionDenial(err) ? err : err.message;
@@ -178,16 +180,20 @@ function reportConflict(comparisonResult) {
         return;
     }
 
-    // Extract role from context for tagging
-    let role = 'unknown';
-    if (comparisonResult.context?.user) {
-        role = 'user';
-    } else if (comparisonResult.context?.api_key) {
-        role = 'api_key';
-    } else if (comparisonResult.context?.member) {
-        role = 'member';
-    } else if (comparisonResult.context?.internal) {
-        role = 'internal';
+    // Use the resolved role name from the new permission system if available
+    // Falls back to context type if role wasn't resolved (e.g., permission denied before resolution)
+    let role = comparisonResult.resolvedRole || 'unknown';
+    if (role === 'unknown') {
+        // Fallback to context type for identification
+        if (comparisonResult.context?.user) {
+            role = 'user (unresolved)';
+        } else if (comparisonResult.context?.api_key) {
+            role = 'api_key (unresolved)';
+        } else if (comparisonResult.context?.member) {
+            role = 'member (unresolved)';
+        } else if (comparisonResult.context?.internal) {
+            role = 'internal';
+        }
     }
 
     // Determine model ID for logging
@@ -218,6 +224,7 @@ function reportConflict(comparisonResult) {
             action: comparisonResult.action,
             objectType: comparisonResult.objectType,
             modelId: modelId,
+            resolvedRole: comparisonResult.resolvedRole,
             oldGranted: comparisonResult.oldGranted,
             newGranted: comparisonResult.newGranted,
             oldError: comparisonResult.oldError?.message || comparisonResult.oldError,

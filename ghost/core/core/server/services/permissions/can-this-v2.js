@@ -142,7 +142,7 @@ function buildPermissionContext(context, role, unsafeAttrs) {
  * @param {string} objectType - Object type (e.g., 'post', 'user', 'comment')
  * @param {Object|string|null} modelOrId - Model instance or ID (optional)
  * @param {Object} unsafeAttrs - Attributes being modified (optional)
- * @returns {Promise<{excludedAttrs: string[]}>} Result with optional excluded attributes
+ * @returns {Promise<{excludedAttrs: string[], role: string|null}>} Result with excluded attributes and resolved role
  * @throws {NoPermissionError} When permission is denied
  */
 async function checkPermission(context, action, objectType, modelOrId = null, unsafeAttrs = {}) {
@@ -151,7 +151,7 @@ async function checkPermission(context, action, objectType, modelOrId = null, un
 
     // Internal context always has permission
     if (parsedContext.internal) {
-        return {excludedAttrs: []};
+        return {excludedAttrs: [], role: 'internal'};
     }
 
     // Load permissions from providers
@@ -192,7 +192,7 @@ async function checkPermission(context, action, objectType, modelOrId = null, un
 
         if (result === 'grant') {
             // Granted regardless of base permission
-            return {excludedAttrs};
+            return {excludedAttrs, role};
         }
 
         // result === null means defer to base permission
@@ -202,7 +202,7 @@ async function checkPermission(context, action, objectType, modelOrId = null, un
             });
         }
 
-        return {excludedAttrs};
+        return {excludedAttrs, role};
     }
 
     // Step 4: No permissibleV2, use base permission only
@@ -212,7 +212,7 @@ async function checkPermission(context, action, objectType, modelOrId = null, un
         });
     }
 
-    return {excludedAttrs: []};
+    return {excludedAttrs: [], role};
 }
 
 module.exports = {

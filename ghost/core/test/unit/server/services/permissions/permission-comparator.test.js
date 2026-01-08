@@ -317,6 +317,7 @@ describe('permission-comparator', function () {
                 oldError: null,
                 newError: {message: 'No permission'},
                 newExcludedAttrs: [],
+                resolvedRole: 'Administrator',
                 timestamp: '2026-01-08T00:00:00.000Z'
             };
 
@@ -330,10 +331,10 @@ describe('permission-comparator', function () {
             call.args[1].tags.permission_decision.should.equal('CONFLICT_OLD_GRANTED');
             call.args[1].tags.permission_action.should.equal('edit');
             call.args[1].tags.permission_object.should.equal('post');
-            call.args[1].tags.permission_role.should.equal('user');
+            call.args[1].tags.permission_role.should.equal('Administrator');
         });
 
-        it('correctly identifies api_key role', function () {
+        it('uses resolved role from new system for api_key context', function () {
             const captureMessageStub = sinon.stub(sentry, 'captureMessage');
 
             const comparisonResult = {
@@ -345,15 +346,16 @@ describe('permission-comparator', function () {
                 modelOrId: null,
                 oldGranted: false,
                 newGranted: true,
+                resolvedRole: 'Admin Integration',
                 timestamp: '2026-01-08T00:00:00.000Z'
             };
 
             permissionComparator.reportConflict(comparisonResult);
 
-            captureMessageStub.firstCall.args[1].tags.permission_role.should.equal('api_key');
+            captureMessageStub.firstCall.args[1].tags.permission_role.should.equal('Admin Integration');
         });
 
-        it('correctly identifies member role', function () {
+        it('uses resolved role from new system for member context', function () {
             const captureMessageStub = sinon.stub(sentry, 'captureMessage');
 
             const comparisonResult = {
@@ -365,12 +367,34 @@ describe('permission-comparator', function () {
                 modelOrId: 'comment-id-1',
                 oldGranted: true,
                 newGranted: false,
+                resolvedRole: 'Member',
                 timestamp: '2026-01-08T00:00:00.000Z'
             };
 
             permissionComparator.reportConflict(comparisonResult);
 
-            captureMessageStub.firstCall.args[1].tags.permission_role.should.equal('member');
+            captureMessageStub.firstCall.args[1].tags.permission_role.should.equal('Member');
+        });
+
+        it('falls back to context type with "(unresolved)" when no resolvedRole', function () {
+            const captureMessageStub = sinon.stub(sentry, 'captureMessage');
+
+            const comparisonResult = {
+                conflict: true,
+                decision: 'CONFLICT_OLD_GRANTED',
+                context: {user: 'user-id'},
+                action: 'edit',
+                objectType: 'post',
+                modelOrId: null,
+                oldGranted: true,
+                newGranted: false,
+                resolvedRole: null,
+                timestamp: '2026-01-08T00:00:00.000Z'
+            };
+
+            permissionComparator.reportConflict(comparisonResult);
+
+            captureMessageStub.firstCall.args[1].tags.permission_role.should.equal('user (unresolved)');
         });
 
         it('extracts model ID from object with id property', function () {
