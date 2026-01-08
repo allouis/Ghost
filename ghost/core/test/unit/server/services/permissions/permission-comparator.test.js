@@ -277,4 +277,142 @@ describe('permission-comparator', function () {
                 .should.be.rejectedWith({errorType: 'NoPermissionError'});
         });
     });
+
+    describe('reportConflict', function () {
+        let sentry;
+
+        beforeEach(function () {
+            sentry = require('../../../../../core/shared/sentry');
+            // Ensure captureMessage exists for stubbing (it may be undefined when Sentry is disabled)
+            if (!sentry.captureMessage) {
+                sentry.captureMessage = () => {};
+            }
+        });
+
+        it('does nothing when there is no conflict', function () {
+            const captureMessageStub = sinon.stub(sentry, 'captureMessage');
+
+            const comparisonResult = {
+                conflict: false,
+                decision: 'BOTH_GRANTED'
+            };
+
+            permissionComparator.reportConflict(comparisonResult);
+
+            captureMessageStub.called.should.be.false();
+        });
+
+        it('calls sentry.captureMessage when there is a conflict', function () {
+            const captureMessageStub = sinon.stub(sentry, 'captureMessage');
+
+            const comparisonResult = {
+                conflict: true,
+                decision: 'CONFLICT_OLD_GRANTED',
+                context: {user: 'user-id'},
+                action: 'edit',
+                objectType: 'post',
+                modelOrId: 'post-id-1',
+                oldGranted: true,
+                newGranted: false,
+                oldError: null,
+                newError: {message: 'No permission'},
+                newExcludedAttrs: [],
+                timestamp: '2026-01-08T00:00:00.000Z'
+            };
+
+            permissionComparator.reportConflict(comparisonResult);
+
+            captureMessageStub.calledOnce.should.be.true();
+            const call = captureMessageStub.firstCall;
+
+            call.args[0].should.equal('[Permissions] Conflict detected: CONFLICT_OLD_GRANTED');
+            call.args[1].level.should.equal('info');
+            call.args[1].tags.permission_decision.should.equal('CONFLICT_OLD_GRANTED');
+            call.args[1].tags.permission_action.should.equal('edit');
+            call.args[1].tags.permission_object.should.equal('post');
+            call.args[1].tags.permission_role.should.equal('user');
+        });
+
+        it('correctly identifies api_key role', function () {
+            const captureMessageStub = sinon.stub(sentry, 'captureMessage');
+
+            const comparisonResult = {
+                conflict: true,
+                decision: 'CONFLICT_NEW_GRANTED',
+                context: {api_key: {id: 'key-id'}},
+                action: 'add',
+                objectType: 'post',
+                modelOrId: null,
+                oldGranted: false,
+                newGranted: true,
+                timestamp: '2026-01-08T00:00:00.000Z'
+            };
+
+            permissionComparator.reportConflict(comparisonResult);
+
+            captureMessageStub.firstCall.args[1].tags.permission_role.should.equal('api_key');
+        });
+
+        it('correctly identifies member role', function () {
+            const captureMessageStub = sinon.stub(sentry, 'captureMessage');
+
+            const comparisonResult = {
+                conflict: true,
+                decision: 'CONFLICT_OLD_GRANTED',
+                context: {member: {id: 'member-id'}},
+                action: 'edit',
+                objectType: 'comment',
+                modelOrId: 'comment-id-1',
+                oldGranted: true,
+                newGranted: false,
+                timestamp: '2026-01-08T00:00:00.000Z'
+            };
+
+            permissionComparator.reportConflict(comparisonResult);
+
+            captureMessageStub.firstCall.args[1].tags.permission_role.should.equal('member');
+        });
+
+        it('extracts model ID from object with id property', function () {
+            const captureMessageStub = sinon.stub(sentry, 'captureMessage');
+
+            const comparisonResult = {
+                conflict: true,
+                decision: 'CONFLICT_NEW_GRANTED',
+                context: {user: 'user-id'},
+                action: 'edit',
+                objectType: 'post',
+                modelOrId: {id: 'model-id-123', title: 'Test Post'},
+                oldGranted: false,
+                newGranted: true,
+                timestamp: '2026-01-08T00:00:00.000Z'
+            };
+
+            permissionComparator.reportConflict(comparisonResult);
+
+            captureMessageStub.firstCall.args[1].extra.modelId.should.equal('model-id-123');
+        });
+
+        it('handles missing sentry.captureMessage gracefully', function () {
+            // Temporarily remove captureMessage
+            const originalCaptureMessage = sentry.captureMessage;
+            delete sentry.captureMessage;
+
+            const comparisonResult = {
+                conflict: true,
+                decision: 'CONFLICT_OLD_GRANTED',
+                context: {user: 'user-id'},
+                action: 'edit',
+                objectType: 'post'
+            };
+
+            // Should not throw
+            (function () {
+                permissionComparator.reportConflict(comparisonResult);
+            }).should.not.throw();
+
+            // Restore
+            sentry.captureMessage = originalCaptureMessage;
+        });
+    });
 });

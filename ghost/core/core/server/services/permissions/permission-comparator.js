@@ -7,9 +7,11 @@
  * the new permission system.
  *
  * Part of the permissions system refactor (Phase 4, Step 4.1).
+ * Sentry monitoring added in Step 4.2.
  */
 
 const errors = require('@tryghost/errors');
+const sentry = require('../../../shared/sentry');
 
 /**
  * Decision types for comparison results.
@@ -160,9 +162,76 @@ async function getResultForOldSystem(comparisonResult) {
     }));
 }
 
+/**
+ * Report a permission conflict to Sentry for monitoring.
+ *
+ * This logs conflicts as Sentry events (not errors) to enable
+ * tracking the conflict rate over time without generating noise
+ * in error tracking.
+ *
+ * Part of Phase 4, Step 4.2.
+ *
+ * @param {Object} comparisonResult - The result from compare()
+ */
+function reportConflict(comparisonResult) {
+    if (!comparisonResult.conflict) {
+        return;
+    }
+
+    // Extract role from context for tagging
+    let role = 'unknown';
+    if (comparisonResult.context?.user) {
+        role = 'user';
+    } else if (comparisonResult.context?.api_key) {
+        role = 'api_key';
+    } else if (comparisonResult.context?.member) {
+        role = 'member';
+    } else if (comparisonResult.context?.internal) {
+        role = 'internal';
+    }
+
+    // Determine model ID for logging
+    let modelId = null;
+    if (comparisonResult.modelOrId) {
+        if (typeof comparisonResult.modelOrId === 'string' || typeof comparisonResult.modelOrId === 'number') {
+            modelId = String(comparisonResult.modelOrId);
+        } else if (comparisonResult.modelOrId.id) {
+            modelId = String(comparisonResult.modelOrId.id);
+        }
+    }
+
+    const message = `[Permissions] Conflict detected: ${comparisonResult.decision}`;
+
+    // Use captureMessage with 'info' level to avoid triggering error alerts
+    sentry.captureMessage?.(message, {
+        level: 'info',
+        tags: {
+            permission_decision: comparisonResult.decision,
+            permission_action: comparisonResult.action,
+            permission_object: comparisonResult.objectType,
+            permission_role: role,
+            permission_old_granted: String(comparisonResult.oldGranted),
+            permission_new_granted: String(comparisonResult.newGranted)
+        },
+        extra: {
+            context: comparisonResult.context,
+            action: comparisonResult.action,
+            objectType: comparisonResult.objectType,
+            modelId: modelId,
+            oldGranted: comparisonResult.oldGranted,
+            newGranted: comparisonResult.newGranted,
+            oldError: comparisonResult.oldError?.message || comparisonResult.oldError,
+            newError: comparisonResult.newError?.message || comparisonResult.newError,
+            newExcludedAttrs: comparisonResult.newExcludedAttrs,
+            timestamp: comparisonResult.timestamp
+        }
+    });
+}
+
 module.exports = {
     Decision,
     compare,
     runComparison,
-    getResultForOldSystem
+    getResultForOldSystem,
+    reportConflict
 };
