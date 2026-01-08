@@ -303,5 +303,9 @@
         "captureLinkClickBadMemberUuid": false
     },
     "disableJSBackups": false,
-    "memberWelcomeEmailTestInbox": ""
+    "memberWelcomeEmailTestInbox": "",
+    "permissions": {
+        "useNewSystem": false,
+        "runComparison": false
+    }
 }
