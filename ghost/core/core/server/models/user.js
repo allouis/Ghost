@@ -974,6 +974,106 @@ User = ghostBookshelf.Model.extend({
         }));
     },
 
+    /**
+     * New permission check method with simplified interface.
+     *
+     * Returns: { result: 'grant' | 'deny' | null }
+     * - 'grant': Permission granted regardless of base permission
+     * - 'deny': Permission denied
+     * - null: Defer to base permission check
+     *
+     * This handles:
+     * - Self-edit allowance (but not status/role changes)
+     * - Owner protection (only Owner can edit Owner)
+     * - Owner can never be deleted
+     * - Editor can only edit/delete Author/Contributor
+     * - Staff limits when unsuspending users
+     *
+     * @param {Object|string|number} userModelOrId - User model or ID
+     * @param {string} action - Action being performed (edit, destroy, etc.)
+     * @param {PermissionContext} permCtx - Permission context
+     * @returns {Promise<{result: string|null}>}
+     */
+    async permissibleV2(userModelOrId, action, permCtx) {
+        const isOwnerRole = permCtx.role === 'Owner';
+        const isEditor = permCtx.role === 'Editor' || permCtx.role === 'Super Editor';
+
+        // Load model if given an ID
+        let userModel = userModelOrId;
+        if (typeof userModelOrId === 'string' || typeof userModelOrId === 'number') {
+            userModel = await this.findOne({id: userModelOrId, status: 'all'}, {withRelated: ['roles']});
+            if (!userModel) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.userNotFound)
+                });
+            }
+        }
+
+        // Need to refetch if roles weren't loaded
+        if (typeof userModel.related('roles') !== 'object' || !userModel.related('roles').models) {
+            userModel = await this.findOne({id: userModel.id, status: 'all'}, {withRelated: ['roles']});
+        }
+
+        const unsafeAttrs = permCtx.unsafeAttrs;
+        const isEdit = (action === 'edit');
+        const isDestroy = (action === 'destroy');
+        const isSelf = permCtx.actorId === userModel.id;
+        const targetIsOwner = userModel.hasRole('Owner');
+        const targetIsAuthorOrContributor = userModel.hasRole('Author') || userModel.hasRole('Contributor');
+
+        // Check staff limits when unsuspending non-contributor users
+        if (isEdit && limitService.isLimited('staff')) {
+            const isUnsuspending = unsafeAttrs.status === 'active' && userModel.get('status') === 'inactive';
+            if (isUnsuspending && !userModel.hasRole('Contributor')) {
+                await limitService.errorIfWouldGoOverLimit('staff');
+            }
+        }
+
+        // Owner cannot be deleted EVER
+        if (isDestroy && targetIsOwner) {
+            return {result: 'deny'};
+        }
+
+        // Self-edit restrictions
+        if (isEdit && isSelf) {
+            // Cannot change own status to inactive/locked
+            if (unsafeAttrs.status && User.inactiveStates.indexOf(unsafeAttrs.status) !== -1) {
+                return {result: 'deny'};
+            }
+
+            // Cannot change own role
+            if (unsafeAttrs.roles && unsafeAttrs.roles[0]) {
+                const newRoleId = unsafeAttrs.roles[0].id || unsafeAttrs.roles[0];
+                const currentRoleId = userModel.related('roles').at(0).id;
+                if (newRoleId !== currentRoleId) {
+                    return {result: 'deny'};
+                }
+            }
+
+            // Self-edit allowed otherwise
+            return {result: null};
+        }
+
+        // Owner protection: only Owner can edit Owner user
+        if (isEdit && targetIsOwner && !isOwnerRole) {
+            return {result: 'deny'};
+        }
+
+        // Editor restrictions
+        if (isEditor && !isSelf) {
+            if (isEdit && !targetIsAuthorOrContributor) {
+                return {result: 'deny'};
+            }
+            if (isDestroy && !targetIsAuthorOrContributor) {
+                return {result: 'deny'};
+            }
+        }
+
+        // Admin/Owner can do anything else (except delete Owner, handled above)
+        // Defer to base permission
+        return {result: null};
+    },
+
     // Finds the user by email, and checks the password
     // @TODO: shorten this function and rename...
     check: function check(object) {

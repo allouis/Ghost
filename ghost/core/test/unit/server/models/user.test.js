@@ -6,6 +6,8 @@ const permissions = require('../../../../core/server/services/permissions');
 const schema = require('../../../../core/server/data/schema');
 const security = require('@tryghost/security');
 const testUtils = require('../../../utils');
+const PermissionContext = require('../../../../core/server/services/permissions/PermissionContext');
+const limitService = require('../../../../core/server/services/limits');
 
 describe('Unit: models/user', function () {
     before(function () {
@@ -723,6 +725,285 @@ describe('Unit: models/user', function () {
                     models.User.getOwnerUser.calledOnce.should.be.true();
                     models.User.getOwnerUser.calledWith(options).should.be.true();
                 });
+        });
+    });
+
+    describe('permissibleV2', function () {
+        function getUserModel(id, role, status = 'active') {
+            return {
+                id: id,
+                get: sinon.stub().callsFake((prop) => {
+                    if (prop === 'id') {
+                        return id;
+                    }
+                    if (prop === 'status') {
+                        return status;
+                    }
+                    return null;
+                }),
+                hasRole: sinon.stub().callsFake((roleName) => roleName === role),
+                related: sinon.stub().callsFake((rel) => {
+                    if (rel === 'roles') {
+                        return {
+                            models: [{id: `${role.toLowerCase()}_role_id`, name: role}],
+                            at: (i) => ({id: `${role.toLowerCase()}_role_id`, name: role})
+                        };
+                    }
+                    return {models: []};
+                })
+            };
+        }
+
+        beforeEach(function () {
+            sinon.stub(limitService, 'isLimited').returns(false);
+        });
+
+        describe('self-edit', function () {
+            it('allows user to edit themselves', async function () {
+                const userModel = getUserModel('user_123', 'Author');
+                const permCtx = new PermissionContext({
+                    role: 'Author',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {name: 'New Name'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                should.equal(result.result, null);
+            });
+
+            it('denies user changing own status to inactive', async function () {
+                const userModel = getUserModel('user_123', 'Author');
+                const permCtx = new PermissionContext({
+                    role: 'Author',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'inactive'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('denies user changing own role', async function () {
+                const userModel = getUserModel('user_123', 'Author');
+                const permCtx = new PermissionContext({
+                    role: 'Author',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {roles: [{id: 'admin_role_id'}]}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+        });
+
+        describe('owner protection', function () {
+            it('only Owner can edit Owner user', async function () {
+                const userModel = getUserModel('owner_id', 'Owner');
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'admin_id',
+                    isViaApiKey: false,
+                    unsafeAttrs: {name: 'New Name'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('Owner can edit Owner user', async function () {
+                const userModel = getUserModel('owner_id', 'Owner');
+                const permCtx = new PermissionContext({
+                    role: 'Owner',
+                    actorId: 'owner_id',
+                    isViaApiKey: false,
+                    unsafeAttrs: {name: 'New Name'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                should.equal(result.result, null);
+            });
+
+            it('Owner cannot be deleted', async function () {
+                const userModel = getUserModel('owner_id', 'Owner');
+                const permCtx = new PermissionContext({
+                    role: 'Owner',
+                    actorId: 'owner_id',
+                    isViaApiKey: false
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'destroy', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+        });
+
+        describe('editor restrictions', function () {
+            it('Editor can edit Author', async function () {
+                const userModel = getUserModel('author_id', 'Author');
+                const permCtx = new PermissionContext({
+                    role: 'Editor',
+                    actorId: 'editor_id',
+                    isViaApiKey: false,
+                    unsafeAttrs: {name: 'New Name'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                should.equal(result.result, null);
+            });
+
+            it('Editor can edit Contributor', async function () {
+                const userModel = getUserModel('contrib_id', 'Contributor');
+                const permCtx = new PermissionContext({
+                    role: 'Editor',
+                    actorId: 'editor_id',
+                    isViaApiKey: false,
+                    unsafeAttrs: {name: 'New Name'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                should.equal(result.result, null);
+            });
+
+            it('Editor cannot edit Administrator', async function () {
+                const userModel = getUserModel('admin_id', 'Administrator');
+                const permCtx = new PermissionContext({
+                    role: 'Editor',
+                    actorId: 'editor_id',
+                    isViaApiKey: false,
+                    unsafeAttrs: {name: 'New Name'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('Editor can delete themselves', async function () {
+                const userModel = getUserModel('editor_id', 'Editor');
+                const permCtx = new PermissionContext({
+                    role: 'Editor',
+                    actorId: 'editor_id',
+                    isViaApiKey: false
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'destroy', permCtx);
+                should.equal(result.result, null);
+            });
+
+            it('Editor can delete Author', async function () {
+                const userModel = getUserModel('author_id', 'Author');
+                const permCtx = new PermissionContext({
+                    role: 'Editor',
+                    actorId: 'editor_id',
+                    isViaApiKey: false
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'destroy', permCtx);
+                should.equal(result.result, null);
+            });
+        });
+
+        describe('admin permissions', function () {
+            it('Administrator can edit any non-owner user', async function () {
+                const userModel = getUserModel('editor_id', 'Editor');
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'admin_id',
+                    isViaApiKey: false,
+                    unsafeAttrs: {name: 'New Name'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                should.equal(result.result, null);
+            });
+
+            it('Administrator can delete non-owner user', async function () {
+                const userModel = getUserModel('editor_id', 'Editor');
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'admin_id',
+                    isViaApiKey: false
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'destroy', permCtx);
+                should.equal(result.result, null);
+            });
+        });
+
+        describe('staff limits', function () {
+            it('throws error if unsuspending would exceed staff limit', async function () {
+                limitService.isLimited.returns(true);
+                sinon.stub(limitService, 'errorIfWouldGoOverLimit').rejects(new Error('Staff limit reached'));
+
+                const userModel = getUserModel('user_id', 'Editor', 'inactive');
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'admin_id',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'active'}
+                });
+
+                try {
+                    await models.User.permissibleV2(userModel, 'edit', permCtx);
+                    throw new Error('Should have thrown');
+                } catch (err) {
+                    err.message.should.eql('Staff limit reached');
+                }
+            });
+
+            it('does not check limit when unsuspending Contributor', async function () {
+                limitService.isLimited.returns(true);
+                const errorStub = sinon.stub(limitService, 'errorIfWouldGoOverLimit').rejects(new Error('Staff limit reached'));
+
+                const userModel = getUserModel('user_id', 'Contributor', 'inactive');
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'admin_id',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'active'}
+                });
+
+                const result = await models.User.permissibleV2(userModel, 'edit', permCtx);
+                should.equal(result.result, null);
+                errorStub.called.should.be.false();
+            });
+        });
+
+        describe('model resolution', function () {
+            it('loads model from ID string', async function () {
+                const userModel = getUserModel('user_123', 'Author');
+                const findOneStub = sinon.stub(models.User, 'findOne').resolves(userModel);
+
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'admin_id',
+                    isViaApiKey: false
+                });
+
+                const result = await models.User.permissibleV2('user_123', 'edit', permCtx);
+                should.equal(result.result, null);
+
+                findOneStub.calledOnce.should.be.true();
+                findOneStub.firstCall.args[0].should.deepEqual({id: 'user_123', status: 'all'});
+            });
+
+            it('throws NotFoundError when user not found', async function () {
+                sinon.stub(models.User, 'findOne').resolves(null);
+
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'admin_id',
+                    isViaApiKey: false
+                });
+
+                try {
+                    await models.User.permissibleV2('nonexistent', 'edit', permCtx);
+                    throw new Error('Should have thrown');
+                } catch (err) {
+                    err.errorType.should.eql('NotFoundError');
+                }
+            });
         });
     });
 });
