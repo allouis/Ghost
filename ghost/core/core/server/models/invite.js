@@ -115,6 +115,76 @@ Invite = ghostBookshelf.Model.extend({
                     message: tpl(messages.notEnoughPermission)
                 }));
             });
+    },
+
+    /**
+     * New permission check method with simplified interface.
+     *
+     * Returns: { result: 'grant' | 'deny' | null }
+     * - 'grant': Permission granted regardless of base permission
+     * - 'deny': Permission denied
+     * - null: Defer to base permission check
+     *
+     * @param {Object|string} inviteModelOrId - Invite model or ID (unused for most actions)
+     * @param {string} action - Action being performed (add, browse, etc.)
+     * @param {PermissionContext} permCtx - Permission context with role, isViaApiKey, unsafeAttrs, etc.
+     * @returns {Promise<{result: string|null}>}
+     */
+    async permissibleV2(inviteModelOrId, action, permCtx) {
+        // For non-add actions, defer to base permission
+        if (action !== 'add') {
+            return {result: null};
+        }
+
+        // Get the role being invited to
+        const roleToInvite = await ghostBookshelf.model('Role')
+            .findOne({id: permCtx.unsafeAttrs.role_id});
+
+        if (!roleToInvite) {
+            throw new errors.NotFoundError({
+                message: tpl(messages.roleNotFound)
+            });
+        }
+
+        const targetRoleName = roleToInvite.get('name');
+
+        // Cannot invite Owner
+        if (targetRoleName === 'Owner') {
+            return {result: 'deny'};
+        }
+
+        // Check staff limits for non-Contributor roles
+        if (limitService.isLimited('staff') && targetRoleName !== 'Contributor') {
+            await limitService.errorIfWouldGoOverLimit('staff');
+        }
+
+        // Define invitation hierarchy based on actor type
+        let allowedRoles = [];
+
+        if (permCtx.isViaApiKey) {
+            // API keys can invite Editor, Author, Contributor, Super Editor (not Admin)
+            allowedRoles = ['Editor', 'Author', 'Contributor', 'Super Editor'];
+        } else {
+            // Staff user hierarchy
+            const inviteHierarchy = {
+                Owner: ['Administrator', 'Editor', 'Author', 'Contributor', 'Super Editor'],
+                Administrator: ['Administrator', 'Editor', 'Author', 'Contributor', 'Super Editor'],
+                'Super Editor': ['Author', 'Contributor'],
+                Editor: ['Author', 'Contributor'],
+                Author: [],
+                Contributor: []
+            };
+
+            allowedRoles = inviteHierarchy[permCtx.role] || [];
+        }
+
+        // Check if allowed to invite this role
+        if (!allowedRoles.includes(targetRoleName)) {
+            return {result: 'deny'};
+        }
+
+        // Defer to base permission for final check
+        return {result: null};
     }
 });
 
