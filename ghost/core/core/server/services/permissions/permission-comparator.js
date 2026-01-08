@@ -11,6 +11,7 @@
  */
 
 const errors = require('@tryghost/errors');
+const logging = require('@tryghost/logging');
 const sentry = require('../../../shared/sentry');
 
 /**
@@ -207,6 +208,16 @@ function reportConflict(comparisonResult) {
     }
 
     const message = `[Permissions] Conflict detected: ${comparisonResult.decision}`;
+
+    // Always log conflicts for visibility in development and production logs
+    logging.warn(message, {
+        action: comparisonResult.action,
+        objectType: comparisonResult.objectType,
+        role,
+        oldGranted: comparisonResult.oldGranted,
+        newGranted: comparisonResult.newGranted,
+        modelId
+    });
 
     // Use captureMessage with 'info' level to avoid triggering error alerts
     sentry.captureMessage?.(message, {

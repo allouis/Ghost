@@ -24,7 +24,7 @@ describe('can-this-v2', function () {
                 );
 
                 should.exist(result);
-                result.should.deepEqual({excludedAttrs: []});
+                result.should.deepEqual({excludedAttrs: [], role: 'internal'});
             });
 
             it('grants permission for internal context string', async function () {
@@ -35,7 +35,7 @@ describe('can-this-v2', function () {
                 );
 
                 should.exist(result);
-                result.should.deepEqual({excludedAttrs: []});
+                result.should.deepEqual({excludedAttrs: [], role: 'internal'});
             });
         });
 
@@ -67,7 +67,7 @@ describe('can-this-v2', function () {
                 );
 
                 should.exist(result);
-                result.should.deepEqual({excludedAttrs: []});
+                result.should.deepEqual({excludedAttrs: [], role: 'Administrator'});
 
                 permissionConfig.hasPermission.calledWith('Administrator', 'edit', 'post').should.be.true();
             });
@@ -134,7 +134,7 @@ describe('can-this-v2', function () {
                 );
 
                 should.exist(result);
-                result.should.deepEqual({excludedAttrs: []});
+                result.should.deepEqual({excludedAttrs: [], role: 'Admin Integration'});
             });
 
             it('denies permission when api key role lacks permission', async function () {
@@ -259,7 +259,7 @@ describe('can-this-v2', function () {
                 );
 
                 should.exist(result);
-                result.should.deepEqual({excludedAttrs: []});
+                result.should.deepEqual({excludedAttrs: [], role: 'Member'});
             });
 
             it('denies permission when permissibleV2 returns deny', async function () {
@@ -473,7 +473,7 @@ describe('can-this-v2', function () {
                 );
 
                 should.exist(result);
-                result.should.deepEqual({excludedAttrs: []});
+                result.should.deepEqual({excludedAttrs: [], role: 'Administrator'});
             });
 
             it('denies when base permission is false for models without permissibleV2', async function () {

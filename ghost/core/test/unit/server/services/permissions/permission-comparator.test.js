@@ -280,13 +280,17 @@ describe('permission-comparator', function () {
 
     describe('reportConflict', function () {
         let sentry;
+        let logging;
 
         beforeEach(function () {
             sentry = require('../../../../../core/shared/sentry');
+            logging = require('@tryghost/logging');
             // Ensure captureMessage exists for stubbing (it may be undefined when Sentry is disabled)
             if (!sentry.captureMessage) {
                 sentry.captureMessage = () => {};
             }
+            // Stub logging.warn to prevent console output during tests
+            sinon.stub(logging, 'warn');
         });
 
         it('does nothing when there is no conflict', function () {
@@ -300,9 +304,10 @@ describe('permission-comparator', function () {
             permissionComparator.reportConflict(comparisonResult);
 
             captureMessageStub.called.should.be.false();
+            logging.warn.called.should.be.false();
         });
 
-        it('calls sentry.captureMessage when there is a conflict', function () {
+        it('logs to console and Sentry when there is a conflict', function () {
             const captureMessageStub = sinon.stub(sentry, 'captureMessage');
 
             const comparisonResult = {
@@ -323,6 +328,14 @@ describe('permission-comparator', function () {
 
             permissionComparator.reportConflict(comparisonResult);
 
+            // Should log to console for development visibility
+            logging.warn.calledOnce.should.be.true();
+            logging.warn.firstCall.args[0].should.equal('[Permissions] Conflict detected: CONFLICT_OLD_GRANTED');
+            logging.warn.firstCall.args[1].should.have.property('action', 'edit');
+            logging.warn.firstCall.args[1].should.have.property('objectType', 'post');
+            logging.warn.firstCall.args[1].should.have.property('role', 'Administrator');
+
+            // Should also report to Sentry
             captureMessageStub.calledOnce.should.be.true();
             const call = captureMessageStub.firstCall;
 

@@ -741,12 +741,12 @@ describe('Unit: models/user', function () {
                     }
                     return null;
                 }),
-                hasRole: sinon.stub().callsFake((roleName) => roleName === role),
+                hasRole: sinon.stub().callsFake(roleName => roleName === role),
                 related: sinon.stub().callsFake((rel) => {
                     if (rel === 'roles') {
                         return {
                             models: [{id: `${role.toLowerCase()}_role_id`, name: role}],
-                            at: (i) => ({id: `${role.toLowerCase()}_role_id`, name: role})
+                            at: () => ({id: `${role.toLowerCase()}_role_id`, name: role})
                         };
                     }
                     return {models: []};
