@@ -1447,6 +1447,175 @@ Post = ghostBookshelf.Model.extend({
         }));
     },
 
+    /**
+     * New permission check method with simplified interface.
+     *
+     * Returns: { result: 'grant' | 'deny' | null, excludedAttrs?: string[] }
+     * - 'grant': Permission granted regardless of base permission
+     * - 'deny': Permission denied
+     * - null: Defer to base permission check
+     *
+     * This is the base Post permissibleV2 - it handles:
+     * - Member limits on publishing
+     * - Contributor status restrictions
+     * - Non-admin/editor visibility restrictions
+     * - Excluded attrs for contributors (tags)
+     *
+     * The Authors extension adds ownership/authorship checks on top.
+     *
+     * @param {Object|string} postModelOrId - Post model or ID
+     * @param {string} action - Action being performed (edit, add, destroy, etc.)
+     * @param {PermissionContext} permCtx - Permission context
+     * @returns {Promise<{result: string|null, excludedAttrs?: string[]}>}
+     */
+    async permissibleV2(postModelOrId, action, permCtx) {
+        const isContributor = permCtx.role === 'Contributor';
+        const isAuthor = permCtx.role === 'Author';
+        const isOwnerRole = permCtx.role === 'Owner';
+        const isAdmin = permCtx.role === 'Administrator';
+        const isEditor = permCtx.role === 'Editor' || permCtx.role === 'Super Editor';
+        const isIntegration = permCtx.isViaApiKey;
+
+        const isEdit = (action === 'edit');
+        const isAdd = (action === 'add');
+        const isDestroy = (action === 'destroy');
+
+        const unsafeAttrs = permCtx.unsafeAttrs;
+
+        // Load model if given an ID
+        let postModel = postModelOrId;
+        if (typeof postModelOrId === 'string' || typeof postModelOrId === 'number') {
+            postModel = await this.findOne({id: postModelOrId, status: 'all'}, {withRelated: ['authors']});
+            if (!postModel) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.postNotFound)
+                });
+            }
+        }
+
+        // Helper functions
+        function isChanging(attr) {
+            return postModel && unsafeAttrs[attr] && unsafeAttrs[attr] !== postModel.get(attr);
+        }
+
+        function isPublished() {
+            return unsafeAttrs.status && unsafeAttrs.status !== 'draft';
+        }
+
+        function isDraft() {
+            return postModel && postModel.get('status') === 'draft';
+        }
+
+        function isChangingAuthors() {
+            if (!unsafeAttrs.authors) {
+                return false;
+            }
+            if (!unsafeAttrs.authors.length) {
+                return true;
+            }
+            if (!postModel) {
+                return false;
+            }
+            const existingAuthors = postModel.related('authors');
+            if (!existingAuthors || !existingAuthors.models || !existingAuthors.models.length) {
+                return true;
+            }
+            return unsafeAttrs.authors[0].id !== existingAuthors.models[0].id;
+        }
+
+        function isOwner() {
+            if (!unsafeAttrs.authors || !unsafeAttrs.authors.length) {
+                return false;
+            }
+            return unsafeAttrs.authors[0].id === permCtx.actorId;
+        }
+
+        function isPrimaryAuthor() {
+            if (!postModel) {
+                return false;
+            }
+            const authors = postModel.related('authors');
+            if (!authors || !authors.models || !authors.models.length) {
+                return false;
+            }
+            return permCtx.actorId === authors.models[0].id;
+        }
+
+        function isCoAuthor() {
+            if (!postModel) {
+                return false;
+            }
+            const authors = postModel.related('authors');
+            if (!authors || !authors.models) {
+                return false;
+            }
+            return authors.models.map(author => author.id).includes(permCtx.actorId);
+        }
+
+        // Check member limits when publishing
+        if (limitService.isLimited('members')) {
+            if ((isEdit && isChanging('status') && isDraft()) || (isAdd && isPublished())) {
+                await limitService.errorIfIsOverLimit('members');
+            }
+        }
+
+        // Build excluded attrs
+        const excludedAttrs = [];
+        if (isContributor) {
+            excludedAttrs.push('tags');
+        }
+        if (isContributor || isAuthor) {
+            excludedAttrs.push('authors');
+        }
+
+        // Contributor restrictions
+        if (isContributor) {
+            if (isEdit) {
+                // Contributors can edit if: not changing status, post is draft, and they are co-author
+                if (isChanging('status') || !isDraft() || isChangingAuthors() || !isCoAuthor()) {
+                    return {result: 'deny'};
+                }
+            } else if (isAdd) {
+                // Contributors can add if: not publishing and they are the owner
+                if (isPublished() || !isOwner()) {
+                    return {result: 'deny'};
+                }
+            } else if (isDestroy) {
+                // Contributors can destroy if: draft and primary author
+                if (!isDraft() || !isPrimaryAuthor()) {
+                    return {result: 'deny'};
+                }
+            }
+            return {result: null, excludedAttrs};
+        }
+
+        // Author restrictions
+        if (isAuthor) {
+            if (isEdit) {
+                // Authors can edit if co-author and not changing authors or visibility
+                if (!isCoAuthor() || isChangingAuthors() || isChanging('visibility')) {
+                    return {result: 'deny'};
+                }
+            } else if (isAdd) {
+                // Authors can add if they are setting themselves as owner
+                if (!isOwner() || isChanging('visibility')) {
+                    return {result: 'deny'};
+                }
+            }
+            return {result: null, excludedAttrs};
+        }
+
+        // Non-admin/editor/owner cannot change visibility
+        if (!(isOwnerRole || isAdmin || isEditor || isIntegration)) {
+            if (isChanging('visibility')) {
+                return {result: 'deny'};
+            }
+        }
+
+        // Admin/Editor/Owner/Integration - defer to base permission
+        return {result: null, excludedAttrs};
+    },
+
     countRelations() {
         return {
             signups(modelOrCollection) {

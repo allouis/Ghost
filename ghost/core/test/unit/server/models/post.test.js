@@ -7,6 +7,8 @@ const knex = require('../../../../core/server/data/db').knex;
 const urlService = require('../../../../core/server/services/url');
 const models = require('../../../../core/server/models');
 const security = require('@tryghost/security');
+const PermissionContext = require('../../../../core/server/services/permissions/PermissionContext');
+const limitService = require('../../../../core/server/services/limits');
 
 describe('Unit: models/post', function () {
     const mockDb = require('mock-knex');
@@ -1070,6 +1072,304 @@ describe('Unit: models/post: uses database (@TODO: fix me)', function () {
                 }).catch(() => {
                     done(new Error('Permissible function should have passed for administrator.'));
                 });
+            });
+        });
+    });
+
+    describe('permissibleV2', function () {
+        function getPostModel(status, authors = []) {
+            return {
+                id: 'post_123',
+                get: sinon.stub().callsFake((prop) => {
+                    if (prop === 'status') {
+                        return status;
+                    }
+                    return null;
+                }),
+                related: sinon.stub().callsFake((rel) => {
+                    if (rel === 'authors') {
+                        return {
+                            models: authors.map(a => ({id: a.id}))
+                        };
+                    }
+                    return {models: []};
+                })
+            };
+        }
+
+        beforeEach(function () {
+            sinon.stub(limitService, 'isLimited').returns(false);
+        });
+
+        describe('contributor restrictions', function () {
+            it('Contributor cannot change status on edit', async function () {
+                const postModel = getPostModel('draft', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'published'}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('Contributor can edit own draft post without status change', async function () {
+                const postModel = getPostModel('draft', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {title: 'New Title'}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                should.equal(result.result, null);
+                result.excludedAttrs.should.containDeep(['tags', 'authors']);
+            });
+
+            it('Contributor cannot edit published post', async function () {
+                const postModel = getPostModel('published', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {title: 'New Title'}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('Contributor cannot add published post', async function () {
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'published', authors: [{id: 'user_123'}]}
+                });
+
+                const result = await models.Post.permissibleV2(null, 'add', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('Contributor can add draft post with correct ownership', async function () {
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'draft', authors: [{id: 'user_123'}]}
+                });
+
+                const result = await models.Post.permissibleV2(null, 'add', permCtx);
+                should.equal(result.result, null);
+                result.excludedAttrs.should.containDeep(['tags', 'authors']);
+            });
+
+            it('Contributor cannot add post with different author', async function () {
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'draft', authors: [{id: 'other_user'}]}
+                });
+
+                const result = await models.Post.permissibleV2(null, 'add', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('Contributor can destroy own draft post', async function () {
+                const postModel = getPostModel('draft', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'destroy', permCtx);
+                should.equal(result.result, null);
+            });
+
+            it('Contributor cannot destroy published post', async function () {
+                const postModel = getPostModel('published', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'destroy', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('Contributor cannot destroy post they are not primary author of', async function () {
+                const postModel = getPostModel('draft', [{id: 'other_user'}, {id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Contributor',
+                    actorId: 'user_123',
+                    isViaApiKey: false
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'destroy', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+        });
+
+        describe('author restrictions', function () {
+            it('Author can edit own post', async function () {
+                const postModel = getPostModel('published', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Author',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {title: 'New Title'}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                should.equal(result.result, null);
+                result.excludedAttrs.should.containDeep(['authors']);
+            });
+
+            it('Author cannot change authors', async function () {
+                const postModel = getPostModel('published', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Author',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {authors: [{id: 'other_user'}]}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+
+            it('Author can add post with self as owner', async function () {
+                const permCtx = new PermissionContext({
+                    role: 'Author',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'published', authors: [{id: 'user_123'}]}
+                });
+
+                const result = await models.Post.permissibleV2(null, 'add', permCtx);
+                should.equal(result.result, null);
+                result.excludedAttrs.should.containDeep(['authors']);
+            });
+        });
+
+        describe('visibility restrictions', function () {
+            it('Editor can change visibility', async function () {
+                const postModel = getPostModel('draft', [{id: 'other_user'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Editor',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {visibility: 'members'}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                should.equal(result.result, null);
+            });
+
+            it('Author cannot change visibility', async function () {
+                const postModel = getPostModel('draft', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Author',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {visibility: 'members'}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                result.should.deepEqual({result: 'deny'});
+            });
+        });
+
+        describe('admin and editor permissions', function () {
+            it('Administrator can edit any post', async function () {
+                const postModel = getPostModel('published', [{id: 'other_user'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'draft', visibility: 'public'}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                should.equal(result.result, null);
+                result.excludedAttrs.should.deepEqual([]);
+            });
+
+            it('Editor can edit any post', async function () {
+                const postModel = getPostModel('published', [{id: 'other_user'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Editor',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'draft'}
+                });
+
+                const result = await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                should.equal(result.result, null);
+            });
+        });
+
+        describe('member limits', function () {
+            it('throws error if member limit exceeded when publishing', async function () {
+                limitService.isLimited.returns(true);
+                sinon.stub(limitService, 'errorIfIsOverLimit').rejects(new Error('Member limit exceeded'));
+
+                const postModel = getPostModel('draft', [{id: 'user_123'}]);
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'user_123',
+                    isViaApiKey: false,
+                    unsafeAttrs: {status: 'published'}
+                });
+
+                try {
+                    await models.Post.permissibleV2(postModel, 'edit', permCtx);
+                    throw new Error('Should have thrown');
+                } catch (err) {
+                    err.message.should.eql('Member limit exceeded');
+                }
+            });
+        });
+
+        describe('model resolution', function () {
+            it('loads model from ID string', async function () {
+                const postModel = getPostModel('draft', [{id: 'user_123'}]);
+                const findOneStub = sinon.stub(models.Post, 'findOne').resolves(postModel);
+
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'user_123',
+                    isViaApiKey: false
+                });
+
+                const result = await models.Post.permissibleV2('post_123', 'edit', permCtx);
+                should.equal(result.result, null);
+
+                findOneStub.calledOnce.should.be.true();
+                findOneStub.firstCall.args[0].should.deepEqual({id: 'post_123', status: 'all'});
+            });
+
+            it('throws NotFoundError when post not found', async function () {
+                sinon.stub(models.Post, 'findOne').resolves(null);
+
+                const permCtx = new PermissionContext({
+                    role: 'Administrator',
+                    actorId: 'user_123',
+                    isViaApiKey: false
+                });
+
+                try {
+                    await models.Post.permissibleV2('nonexistent', 'edit', permCtx);
+                    throw new Error('Should have thrown');
+                } catch (err) {
+                    err.errorType.should.eql('NotFoundError');
+                }
             });
         });
     });
