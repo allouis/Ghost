@@ -194,7 +194,7 @@ yalc.lock
 /ai
 
 # direnv environment loader files
-.envrc
+.direnv
 
 # e2e test suite
 /e2e/test-results
